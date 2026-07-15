@@ -299,6 +299,8 @@ function makeRng(seed){
 function getColors(){ return PALETTES[state.paletteIdx][state.mode]; }
 
 function render(ctx,w,h){
+  if(!w || !h) return ctx.canvas;
+
   const rng = makeRng(state.seed*7 + state.density);
   const [bg,mid,fg] = getColors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
