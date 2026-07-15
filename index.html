@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WLLPR — Minimalist Wallpaper Generator</title>
+<style>
+  /* ============ GLOBAL & THEME ============ */
+  :root{
+    --bg:#0b0d12;
+    --bg-2:#11141b;
+    --panel:rgba(255,255,255,0.06);
+    --panel-border:rgba(255,255,255,0.12);
+    --txt:#f4f6fb;
+    --txt-dim:#9aa3b2;
+    --accent:#6ee7ff;
+    --accent-2:#c4b5ff;
+    --radius:18px;
+    --blur:18px;
+    --shadow:0 20px 60px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(110,231,255,.10), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(196,181,255,.10), transparent 55%),
+      var(--bg);
+    color:var(--txt);
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  .aurora{position:fixed;inset:0;z-index:-1;filter:blur(80px);opacity:.5;pointer-events:none}
+  .aurora span{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:float 18s ease-in-out infinite}
+  .aurora span:nth-child(1){width:480px;height:480px;background:#6ee7ff;left:-100px;top:-80px}
+  .aurora span:nth-child(2){width:420px;height:420px;background:#c4b5ff;right:-80px;top:30%;animation-delay:-6s}
+  .aurora span:nth-child(3){width:360px;height:360px;background:#ff8fb1;left:30%;bottom:-120px;animation-delay:-12s}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,-30px) scale(1.1)}}
+
+  /* ============ LAYOUT ============ */
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 24px 60px}
+  
+  .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px}
+  .brand h1{font-size:28px;letter-spacing:.18em;font-weight:800}
+  .brand .tag{font-size:12px;color:var(--txt-dim);letter-spacing:.2em;text-transform:uppercase;display:block;margin-top:4px}
+  
+  .toggle-group{display:flex;gap:6px;background:rgba(0,0,0,0.25);padding:6px;border-radius:12px;backdrop-filter:blur(10px)}
+  .toggle-group button{background:transparent;border:none;color:var(--txt-dim);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:0.2s}
+  .toggle-group button.active{background:var(--accent);color:#06121a}
+
+  .grid{display:grid;grid-template-columns:1.4fr .9fr;gap:28px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+  /* ============ PREVIEW CARD ============ */
+  .preview-card{
+    background:var(--panel);border:1px solid var(--panel-border);
+    backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));
+    border-radius:24px;padding:24px;box-shadow:var(--shadow);
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .canvas-stage{position:relative;display:flex;flex-direction:column;gap:18px;align-items:center}
+  
+  #canvas-mount {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 300px;
+    transition: all 0.3s ease;
+  }
+  
+  #preview {
+    background:#000;
+    box-shadow:0 30px 80px rgba(0,0,0,.5);
+    transition:opacity .3s, transform .4s, width .3s, height .3s;
+    border-radius: 14px;
+    display: block;
+  }
+  #preview.swap{opacity:0;transform:scale(.985)}
+  #preview.is-phone {
+    border-radius: 24px;
+    border: 4px solid #1a1a1a;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+  }
+
+  .device-toggle{display:flex;gap:8px;background:rgba(0,0,0,.25);padding:6px;border-radius:14px}
+  .device-toggle button{border:none;background:transparent;color:var(--txt-dim);
+    padding:8px 16px;border-radius:10px;cursor:pointer;font-size:13px;transition:.2s}
+  .device-toggle button.active{background:var(--accent);color:#04222b;font-weight:600}
+
+  .actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:14px;
+    font-weight:600;cursor:pointer;border:1px solid var(--panel-border);transition:.2s;font-size:14px}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#06121a;border:none}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(110,231,255,.35)}
+  .btn-ghost{background:var(--panel);color:var(--txt)}
+  .btn-ghost:hover{background:rgba(255,255,255,.1)}
+
+  /* ============ CONTROLS PANEL ============ */
+  .controls{display:flex;flex-direction:column;gap:18px}
+  .panel{background:var(--panel);border:1px solid var(--panel-border);
+    backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));
+    border-radius:20px;padding:20px}
+  .panel h3{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--txt-dim);margin-bottom:14px}
+  
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:9px 14px;border-radius:12px;border:1px solid var(--panel-border);
+    background:rgba(255,255,255,.03);color:var(--txt-dim);cursor:pointer;font-size:13px;transition:.2s}
+  .chip:hover{color:var(--txt)}
+  .chip.active{background:var(--accent);color:#06121a;border-color:var(--accent);font-weight:600}
+
+  .palette-row{display:flex;gap:10px;flex-wrap:wrap}
+  .swatch{width:44px;height:44px;border-radius:12px;cursor:pointer;border:2px solid transparent;
+    transition:.2s;display:flex;overflow:hidden}
+  .swatch.active{border-color:var(--accent);transform:scale(1.05)}
+  .swatch div{flex:1}
+
+  .seg{display:flex;background:rgba(0,0,0,.25);border-radius:12px;padding:5px}
+  .seg button{flex:1;border:none;background:transparent;color:var(--txt-dim);padding:9px;border-radius:9px;cursor:pointer;font-size:13px;transition:.2s}
+  .seg button.active{background:rgba(255,255,255,.12);color:var(--txt)}
+
+  .slider-row{display:flex;align-items:center;gap:14px}
+  .slider-row label{font-size:13px;color:var(--txt-dim);min-width:80px}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .val{font-variant-numeric:tabular-nums;font-size:12px;color:var(--txt);min-width:32px;text-align:right}
+
+  .history{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .history img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;cursor:pointer;
+    border:1px solid var(--panel-border);transition:.2s}
+  .history img:hover{transform:scale(1.04);border-color:var(--accent)}
+
+  footer{margin-top:40px;text-align:center;color:var(--txt-dim);font-size:13px}
+  footer a{color:var(--accent);text-decoration:none}
+
+  /* ============ TOAST ============ */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:rgba(20,24,33,.95);border:1px solid var(--panel-border);color:var(--txt);
+    padding:14px 22px;border-radius:14px;backdrop-filter:blur(10px);transition:.35s;z-index:50;font-size:14px}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body class="lang-en">
+
+<div class="aurora"><span></span><span></span><span></span></div>
+
+<div class="wrap">
+  <header class="top-bar">
+    <div class="brand">
+      <h1>WLLPR</h1>
+      <span class="tag" data-i18n="subtitle">Minimalist Wallpaper Generator</span>
+    </div>
+    <div class="toggle-group" id="langToggle">
+      <button data-lang="en" class="active">EN</button>
+      <button data-lang="pt">PT</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- PREVIEW AREA -->
+    <section class="preview-card">
+      <div class="canvas-stage">
+        <div class="device-toggle" id="deviceToggle">
+          <button data-device="desktop" class="active">Desktop 4K</button>
+          <button data-device="phone">iPhone</button>
+        </div>
+        
+        <div id="canvas-mount"></div>
+        
+        <div class="actions">
+          <button class="btn btn-primary" id="generate" data-i18n="generate">Generate New</button>
+          <button class="btn btn-ghost" id="randomAll" data-i18n="randomAll">Random All</button>
+          <button class="btn btn-ghost" id="dlDesktop" data-i18n="downloadDesktop">Download Desktop</button>
+          <button class="btn btn-ghost" id="dlPhone" data-i18n="downloadPhone">Download iPhone</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTROLS AREA -->
+    <aside class="controls">
+      <div class="panel">
+        <h3 data-i18n="pattern">Pattern</h3>
+        <div class="chips" id="patternChips"></div>
+      </div>
+      
+      <div class="panel">
+        <h3 data-i18n="palette">Palette</h3>
+        <div class="palette-row" id="paletteRow"></div>
+      </div>
+      
+      <div class="panel">
+        <h3 data-i18n="mode">Mode</h3>
+        <div class="seg" id="modeSeg">
+          <button data-mode="dark" class="active" data-i18n="dark">Dark</button>
+          <button data-mode="light" data-i18n="light">Light</button>
+        </div>
+      </div>
+      
+      <div class="panel">
+        <h3 data-i18n="variation">Variation</h3>
+        <div class="slider-row">
+          <label data-i18n="seed">Seed</label>
+          <input type="range" id="seed" min="0" max="9999" value="42" />
+          <span class="val" id="seedVal">42</span>
+        </div>
+        <div class="slider-row" style="margin-top:12px">
+          <label data-i18n="density">Density</label>
+          <input type="range" id="density" min="1" max="10" value="5" />
+          <span class="val" id="densityVal">5</span>
+        </div>
+      </div>
+      
+      <div class="panel">
+        <h3 data-i18n="history">History</h3>
+        <div class="history" id="history"></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <span data-i18n="created">Created by</span> <a href="https://instagram.com/pedro___neres" target="_blank">@pedro___neres</a>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ STATE & CONFIG ============ */
+const PATTERNS = ['Arcs','Hills','Waves','Dunes','Mountains','Scribble','Gradient','Mesh','Concentric','Bauhaus','Topo'];
+const PALETTES = [
+  {name:'Ocean', dark:['#0b1f3a','#1d4e89','#6ee7ff'], light:['#e8f6ff','#a9def9','#1d4e89']},
+  {name:'Sunset', dark:['#2b1055','#7597de','#ff6ec7'], light:['#fff1e6','#ffb38a','#d72660']},
+  {name:'Forest', dark:['#0a2e1f','#1e7d5a','#a8e6a1'], light:['#eef7ee','#9bd8a0','#1e7d5a']},
+  {name:'Mono', dark:['#0a0a0a','#3a3a3a','#e8e8e8'], light:['#f5f5f5','#cccccc','#222222']},
+  {name:'Candy', dark:['#1a1033','#7b2ff7','#ff5e9c'], light:['#fbe4ff','#d59bff','#7b2ff7']},
+  {name:'Sand', dark:['#241c14','#a47148','#e8c39e'], light:['#fbf3e6','#d8b48a','#7a4f25']},
+  {name:'Neon', dark:['#05060f','#00ffd0','#ff2e88'], light:['#e6fff9','#7af3df','#0c5f51']},
+  {name:'Berry', dark:['#1a0717','#7d2160','#ffb3d9'], light:['#fdeef6','#e08bbf','#7d2160']}
+];
+const DEVICES = {
+  desktop:{w:3840,h:2160,label:'4K · 3840×2160', previewMaxW: 760},
+  phone:{w:1290,h:2796,label:'iPhone · 1290×2796', previewMaxW: 260}
+};
+
+const state = {
+  pattern:'Arcs', paletteIdx:0, mode:'dark', device:'desktop',
+  seed:42, density:5, history:[], lang:'en'
+};
+
+const translations = {
+  en: {
+    subtitle: "Minimalist Wallpaper Generator",
+    pattern: "Pattern", palette: "Palette", mode: "Mode", 
+    dark: "Dark", light: "Light", variation: "Variation",
+    seed: "Seed", density: "Density", generate: "Generate New",
+    randomAll: "Random All", 
+    downloadDesktop: "Download Desktop", downloadPhone: "Download iPhone",
+    created: "Created by", history: "History"
+  },
+  pt: {
+    subtitle: "Gerador de Papéis de Parede Minimalistas",
+    pattern: "Padrão", palette: "Paleta", mode: "Modo", 
+    dark: "Escuro", light: "Claro", variation: "Variação",
+    seed: "Semente", density: "Densidade", generate: "Gerar um Novo",
+    randomAll: "Aleatório Total", 
+    downloadDesktop: "Baixar Desktop", downloadPhone: "Baixar iPhone",
+    created: "Criado por", history: "Histórico"
+  }
+};
+
+/* ============ SEEDED RNG ============ */
+function makeRng(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ============ PATTERN RENDERERS (ASPECT RATIO INDEPENDENT) ============ */
+function getColors(){ return PALETTES[state.paletteIdx][state.mode]; }
+
+function render(ctx,w,h){
+  const rng = makeRng(state.seed*7 + state.density);
+  const [bg,mid,fg] = getColors();
+  ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
+
+  switch(state.pattern){
+    case 'Arcs': drawArcs(ctx,w,h,rng,mid,fg); break;
+    case 'Hills': drawHills(ctx,w,h,rng,mid,fg); break;
+    case 'Waves': drawWaves(ctx,w,h,rng,mid,fg); break;
+    case 'Dunes': drawDunes(ctx,w,h,rng,mid,fg); break;
+    case 'Mountains': drawMountains(ctx,w,h,rng,mid,fg); break;
+    case 'Scribble': drawScribble(ctx,w,h,rng,mid,fg); break;
+    case 'Gradient': drawGradient(ctx,w,h,rng,mid,fg); break;
+    case 'Mesh': drawMesh(ctx,w,h,rng,mid,fg); break;
+    case 'Concentric': drawConcentric(ctx,w,h,rng,mid,fg); break;
+    case 'Bauhaus': drawBauhaus(ctx,w,h,rng,mid,fg); break;
+    case 'Topo': drawTopo(ctx,w,h,rng,mid,fg); break;
+  }
+}
+
+function drawArcs(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h); // Unit for scaling
+  const n = 4 + state.density;
+  for(let i=0;i<n;i++){
+    ctx.beginPath();
+    const r = Math.max(40, (0.15 + i/n*0.6) * u);
+    const cx = w*(0.2+rng()*0.6), cy = h*(0.4+rng()*0.5);
+    ctx.arc(cx,cy,r,0,Math.PI*2);
+    ctx.lineWidth = Math.max(4, u*0.004);
+    ctx.strokeStyle = i%2? fg : mid;
+    ctx.globalAlpha = 0.85 - i*0.05;
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawHills(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h);
+  const layers = 3 + Math.floor(state.density/2);
+  for(let l=0;l<layers;l++){
+    ctx.beginPath();
+    ctx.moveTo(0,h);
+    const base = h*(0.55+l*0.1);
+    const amp = u*(0.06+rng()*0.05); // Changed from h to u
+    const freq = 1 + l*0.5 + rng();
+    ctx.lineTo(0,base);
+    for(let x=0;x<=w;x+=12){
+      const y = base + Math.sin(x/w*Math.PI*2*freq + l)*amp;
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(w,h); ctx.closePath();
+    ctx.fillStyle = l%2? fg : mid;
+    ctx.globalAlpha = 0.3 + l*0.12;
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawWaves(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h);
+  const lines = 20 + state.density*6;
+  for(let i=0;i<lines;i++){
+    ctx.beginPath();
+    const y = (i/lines)*h;
+    ctx.moveTo(0,y);
+    for(let x=0;x<=w;x+=10){
+      const yy = y + Math.sin(x/w*Math.PI*4 + i*0.3)*(u*0.02); // Changed from h to u
+      ctx.lineTo(x,yy);
+    }
+    ctx.strokeStyle = i%3===0? fg : mid;
+    ctx.globalAlpha = 0.25 + (i/lines)*0.5;
+    ctx.lineWidth = Math.max(1, w*0.0008);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawDunes(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h);
+  const layers = 4 + state.density;
+  for(let l=0;l<layers;l++){
+    ctx.beginPath();
+    ctx.moveTo(0,h);
+    const base = h*(0.5+l*0.08);
+    ctx.lineTo(0,base);
+    let x = 0;
+    const curveDepth = u*0.05 * (1 + rng()*0.5); // Changed from h to u
+    while(x <= w){
+      const cp1x = x + w*0.05;
+      const cp2x = x + w*0.1;
+      const nextX = x + w*0.15;
+      ctx.bezierCurveTo(cp1x, base - curveDepth, cp2x, base + curveDepth, nextX, base);
+      x = nextX;
+    }
+    ctx.lineTo(w,h); ctx.closePath();
+    ctx.fillStyle = l%2? fg : mid;
+    ctx.globalAlpha = 0.2 + l*0.1;
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawMountains(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h);
+  const layers = 3 + Math.floor(state.density/2);
+  for(let l=0;l<layers;l++){
+    ctx.beginPath();
+    ctx.moveTo(0,h);
+    const base = h*(0.6+l*0.08);
+    ctx.lineTo(0, base);
+    let x = 0;
+    const step = w / (8 + l*4);
+    while(x <= w){
+      const peakH = u * (0.1 + rng()*0.15); // Changed from h to u
+      x += step/2;
+      ctx.lineTo(x, base - peakH);
+      x += step/2;
+      ctx.lineTo(x, base);
+    }
+    ctx.lineTo(w,h); ctx.closePath();
+    ctx.fillStyle = l%2? fg : mid;
+    ctx.globalAlpha = 0.4 + l*0.15;
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawScribble(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h);
+  const lines = 5 + state.density;
+  for(let i=0; i<lines; i++){
+    ctx.beginPath();
+    let x = rng()*w;
+    let y = rng()*h;
+    ctx.moveTo(x,y);
+    const steps = 50 + state.density * 10;
+    for(let s=0; s<steps; s++){
+      // Changed from w/h to u to prevent vertical stretching on mobile
+      x += (rng()-0.5) * u*0.1; 
+      y += (rng()-0.5) * u*0.1; 
+      x = Math.max(0, Math.min(w, x));
+      y = Math.max(0, Math.min(h, y));
+      ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = i%2? fg : mid;
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = Math.max(1, w*0.0015);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawGradient(ctx,w,h,rng,mid,fg){
+  const g = ctx.createLinearGradient(0,0,w,h);
+  g.addColorStop(0, mid);
+  g.addColorStop(1, fg);
+  ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+  const r = Math.min(w,h)*0.4;
+  const rg = ctx.createRadialGradient(w*0.7,h*0.3,0,w*0.7,h*0.3,r);
+  rg.addColorStop(0, fg);
+  rg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rg; ctx.globalAlpha=0.5; ctx.fillRect(0,0,w,h);
+  ctx.globalAlpha=1;
+}
+
+function drawMesh(ctx,w,h,rng,mid,fg){
+  const blobs = 4 + state.density;
+  for(let i=0;i<blobs;i++){
+    const cx=w*rng(), cy=h*rng(), r=Math.min(w,h)*(0.3+rng()*0.3);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+    const col = i%2? fg : mid;
+    g.addColorStop(0, col);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
+}
+
+function drawConcentric(ctx,w,h,rng,mid,fg){
+  const cx=w*(0.4+rng()*0.2), cy=h*(0.4+rng()*0.2);
+  const max=Math.hypot(w,h);
+  const rings=10+state.density*3;
+  for(let i=rings;i>0;i--){
+    ctx.beginPath();
+    ctx.arc(cx,cy, Math.max(8,(i/rings)*max*0.7),0,Math.PI*2);
+    ctx.fillStyle = i%2? mid : fg;
+    ctx.globalAlpha = 0.15 + (i/rings)*0.5;
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawBauhaus(ctx,w,h,rng,mid,fg){
+  const [bg]=getColors();
+  const shapes=6+state.density;
+  for(let i=0;i<shapes;i++){
+    const x=rng()*w, y=rng()*h, s=Math.min(w,h)*(0.1+rng()*0.3);
+    ctx.globalAlpha=0.7;
+    ctx.fillStyle = i%3===0? fg : (i%3===1? mid : bg);
+    ctx.beginPath();
+    const type=Math.floor(rng()*3);
+    if(type===0) ctx.arc(x,y,s/2,0,Math.PI*2);
+    else if(type===1) ctx.rect(x-s/2,y-s/2,s,s);
+    else { ctx.moveTo(x,y-s/2); ctx.lineTo(x+s/2,y+s/2); ctx.lineTo(x-s/2,y+s/2); ctx.closePath(); }
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawTopo(ctx,w,h,rng,mid,fg){
+  const u = Math.min(w,h);
+  const layers=12+state.density*2;
+  for(let l=0;l<layers;l++){
+    ctx.beginPath();
+    let started=false;
+    for(let x=0;x<=w;x+=14){
+      const n = Math.sin(x/w*6 + l*0.6)*0.5 + Math.sin(x/w*3 + l*0.3)*0.5;
+      // Changed from h to u for vertical scaling to prevent stretching
+      const y = h*0.5 + n*u*0.3 + (l-layers/2)*u*0.05; 
+      if(!started){ctx.moveTo(x,y);started=true} else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = l%2? fg : mid;
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = Math.max(1, w*0.0006);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+
+/* ============ CANVAS & RENDER PIPELINE ============ */
+const preview = document.createElement('canvas');
+preview.id = 'preview';
+const pctx = preview.getContext('2d');
+
+function renderPreview(){
+  const d = DEVICES[state.device];
+  const ratio = d.w / d.h;
+  
+  // Set internal canvas resolution scaled down for preview performance
+  preview.width = d.previewMaxW; 
+  preview.height = Math.round(d.previewMaxW / ratio);
+  
+  // Update CSS styling to make it look like a phone or desktop
+  preview.classList.toggle('is-phone', state.device === 'phone');
+  preview.style.width = (state.device === 'phone' ? '240px' : '100%');
+  preview.style.maxWidth = (state.device === 'phone' ? '240px' : '760px');
+  preview.style.height = 'auto';
+  
+  render(pctx, preview.width, preview.height);
+}
+
+function exportPNG(deviceType){
+  const d = DEVICES[deviceType];
+  const c = document.createElement('canvas');
+  c.width = d.w; c.height = d.h;
+  render(c.getContext('2d'), d.w, d.h);
+  const a = document.createElement('a');
+  a.download = `wllpr-${state.pattern}-${deviceType}-${state.seed}.png`;
+  a.href = c.toDataURL('image/png');
+  a.click();
+  toast(`${translations[state.lang].downloadDesktop.includes('Baixar') ? 'Baixado' : 'Downloaded'}: ${d.label}`);
+}
+
+/* ============ UI WIRING & SYNC ============ */
+function buildPatternChips(){
+  const box=document.getElementById('patternChips');
+  box.innerHTML='';
+  PATTERNS.forEach(p=>{
+    const b=document.createElement('button');
+    b.className='chip'+(p===state.pattern?' active':'');
+    b.textContent=p; 
+    b.onclick=()=>{state.pattern=p; syncUI(); renderPreview();};
+    box.appendChild(b);
+  });
+}
+
+function buildPalettes(){
+  const box=document.getElementById('paletteRow');
+  box.innerHTML='';
+  PALETTES.forEach((pal,i)=>{
+    const sw=document.createElement('div');
+    sw.className='swatch'+(i===state.paletteIdx?' active':'');
+    pal.dark.forEach(c=>{const d=document.createElement('div');d.style.background=c;sw.appendChild(d);});
+    sw.onclick=()=>{state.paletteIdx=i; syncUI(); renderPreview();};
+    box.appendChild(sw);
+  });
+}
+
+function syncUI(){
+  document.querySelectorAll('#patternChips .chip').forEach(c => c.classList.toggle('active', c.textContent === state.pattern));
+  document.querySelectorAll('#paletteRow .swatch').forEach((s,i) => s.classList.toggle('active', i === state.paletteIdx));
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
+  document.querySelectorAll('.device-toggle button').forEach(b => b.classList.toggle('active', b.dataset.device === state.device));
+  
+  document.getElementById('seed').value = state.seed;
+  document.getElementById('seedVal').textContent = state.seed;
+  document.getElementById('density').value = state.density;
+  document.getElementById('densityVal').textContent = state.density;
+}
+
+function applyLang(lang){
+  state.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if(translations[lang][key]) el.textContent = translations[lang][key];
+  });
+  document.querySelectorAll('#langToggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+}
+
+/* ============ EVENT LISTENERS ============ */
+document.getElementById('langToggle').addEventListener('click', e => { if(e.target.dataset.lang) applyLang(e.target.dataset.lang); });
+
+document.getElementById('modeSeg').addEventListener('click', e => {
+  if(e.target.dataset.mode){state.mode=e.target.dataset.mode; syncUI(); renderPreview();}
+});
+
+document.getElementById('deviceToggle').addEventListener('click', e => {
+  if(e.target.dataset.device){state.device=e.target.dataset.device; syncUI(); renderPreview();}
+});
+
+document.getElementById('seed').addEventListener('input', e => {state.seed=+e.target.value; syncUI(); renderPreview();});
+document.getElementById('density').addEventListener('input', e => {state.density=+e.target.value; syncUI(); renderPreview();});
+
+document.getElementById('generate').onclick = () => {state.seed=Math.floor(Math.random()*9999); syncUI(); swapRender();};
+
+document.getElementById('randomAll').onclick = () => {
+  state.pattern=PATTERNS[Math.floor(Math.random()*PATTERNS.length)];
+  state.paletteIdx=Math.floor(Math.random()*PALETTES.length);
+  state.seed=Math.floor(Math.random()*9999);
+  syncUI(); swapRender();
+};
+
+document.getElementById('dlDesktop').onclick = () => exportPNG('desktop');
+document.getElementById('dlPhone').onclick = () => exportPNG('phone');
+
+function swapRender(){
+  preview.classList.add('swap');
+  setTimeout(()=>{renderPreview();pushHistory();preview.classList.remove('swap');},180);
+}
+
+function pushHistory(){
+  const url=preview.toDataURL('image/png');
+  state.history.unshift({url, snap:{...state}});
+  state.history=state.history.slice(0,8);
+  const box=document.getElementById('history');box.innerHTML='';
+  state.history.forEach(h=>{
+    const img=document.createElement('img');img.src=h.url;
+    img.onclick=()=>{Object.assign(state,h.snap); syncUI(); renderPreview();};
+    box.appendChild(img);
+  });
+}
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+// Keyboard shortcuts
+document.addEventListener('keydown',e=>{
+  if(e.key===' '){e.preventDefault();document.getElementById('generate').click();}
+  if(e.key==='s'&&e.ctrlKey){e.preventDefault();exportPNG('desktop');}
+});
+
+/* ============ INIT ============ */
+document.getElementById('canvas-mount').appendChild(preview);
+buildPatternChips();
+buildPalettes();
+syncUI();
+applyLang('en'); // Default to English
+renderPreview();
+pushHistory();
+</script>
+</body>
+</html>
