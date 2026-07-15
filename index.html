@@ -287,6 +287,7 @@ function getColors(){ return PALETTES[state.paletteIdx][state.mode]; }
 
 function render(ctx,w,h){
   const rng = makeRng(state.seed*7 + state.density);
+  const grainSeed = ((state.seed ?? 1) ^ 0x9E3779B9) | 0;
   const [bg,mid,fg] = getColors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
 
@@ -303,6 +304,32 @@ function render(ctx,w,h){
     case 'Bauhaus': drawBauhaus(ctx,w,h,rng,mid,fg); break;
     case 'Topo': drawTopo(ctx,w,h,rng,mid,fg); break;
   }
+
+  postProcess(ctx, w, h, { grainSeed });
+}
+
+function postProcess(ctx, w, h, options = {}){
+  const grain = options.grain ?? 0.035;
+  const grainSeed = options.grainSeed ?? 99;
+  const grainRng = typeof options.grainRng === 'function' ? options.grainRng : makeRng(grainSeed);
+  applyGrain(ctx, w, h, grain, grainRng);
+}
+
+function applyGrain(ctx, w, h, amount, rng){
+  if(amount <= 0) return;
+
+  const image = ctx.getImageData(0, 0, w, h);
+  const data = image.data;
+  const strength = 255 * amount;
+
+  for(let i=0;i<data.length;i+=4){
+    const grain = (rng() - 0.5) * strength;
+    data[i] = Math.max(0, Math.min(255, data[i] + grain));
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + grain));
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + grain));
+  }
+
+  ctx.putImageData(image, 0, 0);
 }
 
 function drawArcs(ctx,w,h,rng,mid,fg){
