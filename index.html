@@ -305,6 +305,19 @@ function render(ctx,w,h){
   }
 }
 
+function applyGrain(ctx, w, h, amount, rng){
+  const clampByte = v => Math.max(0, Math.min(255, Math.round(v)));
+  const image = ctx.getImageData(0, 0, w, h);
+  const d = image.data;
+  for(let i=0;i<d.length;i+=4){
+    const n = (rng() - 0.5) * amount;
+    d[i] = clampByte(d[i] + n);
+    d[i + 1] = clampByte(d[i + 1] + n);
+    d[i + 2] = clampByte(d[i + 2] + n);
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
 function drawArcs(ctx,w,h,rng,mid,fg){
   const u = Math.min(w,h); // Unit for scaling
   const n = 4 + state.density;
