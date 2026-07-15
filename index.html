@@ -198,6 +198,11 @@
           <button data-mode="light" data-i18n="light">Light</button>
         </div>
       </div>
+
+      <div class="panel">
+        <h3 data-i18n="symmetry">Symmetry</h3>
+        <div class="chips" id="symmetryChips"></div>
+      </div>
       
       <div class="panel">
         <h3 data-i18n="variation">Variation</h3>
@@ -230,6 +235,13 @@
 <script>
 /* ============ STATE & CONFIG ============ */
 const PATTERNS = ['Arcs','Hills','Waves','Dunes','Mountains','Scribble','Gradient','Mesh','Concentric','Bauhaus','Topo'];
+const SYMMETRY_MODES = [
+  {value:0, label:'None'},
+  {value:1, label:'Mirror X'},
+  {value:2, label:'Mirror Y'},
+  {value:3, label:'Mirror XY'},
+  {value:4, label:'Radial'}
+];
 const PALETTES = [
   {name:'Ocean', dark:['#0b1f3a','#1d4e89','#6ee7ff'], light:['#e8f6ff','#a9def9','#1d4e89']},
   {name:'Sunset', dark:['#2b1055','#7597de','#ff6ec7'], light:['#fff1e6','#ffb38a','#d72660']},
@@ -245,16 +257,17 @@ const DEVICES = {
   phone:{w:1290,h:2796,label:'iPhone · 1290×2796', previewMaxW: 260}
 };
 
-const state = {
+const defaultState = {
   pattern:'Arcs', paletteIdx:0, mode:'dark', device:'desktop',
-  seed:42, density:5, history:[], lang:'en'
+  seed:42, density:5, symmetry:0, history:[], lang:'en'
 };
+const state = {...defaultState};
 
 const translations = {
   en: {
     subtitle: "Minimalist Wallpaper Generator",
     pattern: "Pattern", palette: "Palette", mode: "Mode", 
-    dark: "Dark", light: "Light", variation: "Variation",
+    dark: "Dark", light: "Light", symmetry: "Symmetry", variation: "Variation",
     seed: "Seed", density: "Density", generate: "Generate New",
     randomAll: "Random All", 
     downloadDesktop: "Download Desktop", downloadPhone: "Download iPhone",
@@ -263,7 +276,7 @@ const translations = {
   pt: {
     subtitle: "Gerador de Papéis de Parede Minimalistas",
     pattern: "Padrão", palette: "Paleta", mode: "Modo", 
-    dark: "Escuro", light: "Claro", variation: "Variação",
+    dark: "Escuro", light: "Claro", symmetry: "Simetria", variation: "Variação",
     seed: "Semente", density: "Densidade", generate: "Gerar um Novo",
     randomAll: "Aleatório Total", 
     downloadDesktop: "Baixar Desktop", downloadPhone: "Baixar iPhone",
@@ -285,50 +298,97 @@ function makeRng(seed){
 /* ============ PATTERN RENDERERS (ASPECT RATIO INDEPENDENT) ============ */
 function getColors(){ return PALETTES[state.paletteIdx][state.mode]; }
 
+function createWorkCanvas(w,h){
+  if(typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w,h);
+  if(typeof document !== 'undefined'){
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+  }
+  throw new Error('Canvas creation is not available in this environment.');
+}
+
 function render(ctx,w,h){
+  if(!w || !h) return ctx.canvas;
+
   const rng = makeRng(state.seed*7 + state.density);
   const grainSeed = ((state.seed ?? 1) ^ 0x9E3779B9) | 0;
   const [bg,mid,fg] = getColors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
 
-  switch(state.pattern){
-    case 'Arcs': drawArcs(ctx,w,h,rng,mid,fg); break;
-    case 'Hills': drawHills(ctx,w,h,rng,mid,fg); break;
-    case 'Waves': drawWaves(ctx,w,h,rng,mid,fg); break;
-    case 'Dunes': drawDunes(ctx,w,h,rng,mid,fg); break;
-    case 'Mountains': drawMountains(ctx,w,h,rng,mid,fg); break;
-    case 'Scribble': drawScribble(ctx,w,h,rng,mid,fg); break;
-    case 'Gradient': drawGradient(ctx,w,h,rng,mid,fg); break;
-    case 'Mesh': drawMesh(ctx,w,h,rng,mid,fg); break;
-    case 'Concentric': drawConcentric(ctx,w,h,rng,mid,fg); break;
-    case 'Bauhaus': drawBauhaus(ctx,w,h,rng,mid,fg); break;
-    case 'Topo': drawTopo(ctx,w,h,rng,mid,fg); break;
-  }
-
-  postProcess(ctx, w, h, { grainSeed });
+  drawWithSymmetry(ctx, w, h, (targetCtx) => {
+    switch(state.pattern){
+      case 'Arcs': drawArcs(targetCtx,w,h,rng,mid,fg); break;
+      case 'Hills': drawHills(targetCtx,w,h,rng,mid,fg); break;
+      case 'Waves': drawWaves(targetCtx,w,h,rng,mid,fg); break;
+      case 'Dunes': drawDunes(targetCtx,w,h,rng,mid,fg); break;
+      case 'Mountains': drawMountains(targetCtx,w,h,rng,mid,fg); break;
+      case 'Scribble': drawScribble(targetCtx,w,h,rng,mid,fg); break;
+      case 'Gradient': drawGradient(targetCtx,w,h,rng,mid,fg); break;
+      case 'Mesh': drawMesh(targetCtx,w,h,rng,mid,fg); break;
+      case 'Concentric': drawConcentric(targetCtx,w,h,rng,mid,fg); break;
+      case 'Bauhaus': drawBauhaus(targetCtx,w,h,rng,mid,fg); break;
+      case 'Topo': drawTopo(targetCtx,w,h,rng,mid,fg); break;
+    }
+  }, state.symmetry);
 }
 
-function postProcess(ctx, w, h, options = {}){
-  const grain = options.grain ?? 0.035;
-  const grainSeed = options.grainSeed ?? 99;
-  const grainRng = typeof options.grainRng === 'function' ? options.grainRng : makeRng(grainSeed);
-  applyGrain(ctx, w, h, grain, grainRng);
+function drawWithSymmetry(ctx, w, h, drawFn, symmetryMode){
+  const mode = Number(symmetryMode) || 0;
+  if(mode === 0){
+    drawFn(ctx);
+    return;
+  }
+
+  const source = document.createElement('canvas');
+  source.width = w; source.height = h;
+  const sourceCtx = source.getContext('2d');
+  drawFn(sourceCtx);
+
+  const drawTransformed = (scaleX, scaleY) => {
+    ctx.save();
+    ctx.translate(scaleX < 0 ? w : 0, scaleY < 0 ? h : 0);
+    ctx.scale(scaleX, scaleY);
+    ctx.drawImage(source, 0, 0);
+    ctx.restore();
+  };
+
+  if(mode === 1 || mode === 2 || mode === 3){
+    drawTransformed(1, 1);
+    if(mode === 1 || mode === 3) drawTransformed(-1, 1);
+    if(mode === 2 || mode === 3) drawTransformed(1, -1);
+    if(mode === 3) drawTransformed(-1, -1);
+    return;
+  }
+
+  if(mode === 4){
+    const copies = 8;
+    for(let i=0;i<copies;i++){
+      ctx.save();
+      ctx.translate(w/2, h/2);
+      ctx.rotate((Math.PI*2/copies)*i);
+      ctx.translate(-w/2, -h/2);
+      ctx.globalAlpha = i === 0 ? 1 : 0.65;
+      ctx.drawImage(source, 0, 0);
+      ctx.restore();
+    }
+    return;
+  }
+
+  drawFn(ctx);
 }
 
 function applyGrain(ctx, w, h, amount, rng){
-  if(amount <= 0) return;
-
+  const clampByte = v => Math.max(0, Math.min(255, Math.round(v)));
   const image = ctx.getImageData(0, 0, w, h);
-  const data = image.data;
-  const strength = 255 * amount;
-
-  for(let i=0;i<data.length;i+=4){
-    const grain = (rng() - 0.5) * strength;
-    data[i] = Math.max(0, Math.min(255, data[i] + grain));
-    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + grain));
-    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + grain));
+  const d = image.data;
+  for(let i=0;i<d.length;i+=4){
+    const n = (rng() - 0.5) * amount;
+    d[i] = clampByte(d[i] + n);
+    d[i + 1] = clampByte(d[i + 1] + n);
+    d[i + 2] = clampByte(d[i + 2] + n);
   }
-
   ctx.putImageData(image, 0, 0);
 }
 
@@ -439,9 +499,66 @@ function drawMountains(ctx,w,h,rng,mid,fg){
   ctx.globalAlpha=1;
 }
 
+
+function createCurlVectorFieldCache(w,h,freq,cellSize=12){
+  const gridCols = Math.ceil(w / cellSize) + 1;
+  const gridRows = Math.ceil(h / cellSize) + 1;
+  const vectors = new Float32Array(gridCols * gridRows * 2);
+
+  for(let row=0; row<gridRows; row++){
+    for(let col=0; col<gridCols; col++){
+      const x = Math.min(w, col * cellSize);
+      const y = Math.min(h, row * cellSize);
+      const nx = x / Math.max(w, 1);
+      const ny = y / Math.max(h, 1);
+      const angle = (
+        Math.sin((nx * 2.7 + freq) * Math.PI * 2) +
+        Math.cos((ny * 3.1 - freq * 0.7) * Math.PI * 2) +
+        Math.sin((nx + ny + freq * 0.31) * Math.PI * 4)
+      ) * Math.PI;
+      const idx = (row * gridCols + col) * 2;
+      vectors[idx] = Math.cos(angle);
+      vectors[idx + 1] = Math.sin(angle);
+    }
+  }
+
+  return { cellSize, gridCols, gridRows, vectors };
+}
+
+function sampleVectorField(cache,x,y,bilinear=true){
+  const gx = Math.max(0, Math.min(cache.gridCols - 1, x / cache.cellSize));
+  const gy = Math.max(0, Math.min(cache.gridRows - 1, y / cache.cellSize));
+
+  if(!bilinear){
+    const col = Math.round(gx);
+    const row = Math.round(gy);
+    const idx = (row * cache.gridCols + col) * 2;
+    return [cache.vectors[idx], cache.vectors[idx + 1]];
+  }
+
+  const x0 = Math.floor(gx);
+  const y0 = Math.floor(gy);
+  const x1 = Math.min(x0 + 1, cache.gridCols - 1);
+  const y1 = Math.min(y0 + 1, cache.gridRows - 1);
+  const tx = gx - x0;
+  const ty = gy - y0;
+  const i00 = (y0 * cache.gridCols + x0) * 2;
+  const i10 = (y0 * cache.gridCols + x1) * 2;
+  const i01 = (y1 * cache.gridCols + x0) * 2;
+  const i11 = (y1 * cache.gridCols + x1) * 2;
+  const dx0 = cache.vectors[i00] + (cache.vectors[i10] - cache.vectors[i00]) * tx;
+  const dy0 = cache.vectors[i00 + 1] + (cache.vectors[i10 + 1] - cache.vectors[i00 + 1]) * tx;
+  const dx1 = cache.vectors[i01] + (cache.vectors[i11] - cache.vectors[i01]) * tx;
+  const dy1 = cache.vectors[i01 + 1] + (cache.vectors[i11 + 1] - cache.vectors[i01 + 1]) * tx;
+  return [dx0 + (dx1 - dx0) * ty, dy0 + (dy1 - dy0) * ty];
+}
+
 function drawScribble(ctx,w,h,rng,mid,fg){
   const u = Math.min(w,h);
   const lines = 5 + state.density;
+  const field = createCurlVectorFieldCache(w, h, state.seed * 0.017 + state.density * 0.13, Math.max(8, u * 0.006));
+  const stepSize = u * 0.035;
+
   for(let i=0; i<lines; i++){
     ctx.beginPath();
     let x = rng()*w;
@@ -449,9 +566,9 @@ function drawScribble(ctx,w,h,rng,mid,fg){
     ctx.moveTo(x,y);
     const steps = 50 + state.density * 10;
     for(let s=0; s<steps; s++){
-      // Changed from w/h to u to prevent vertical stretching on mobile
-      x += (rng()-0.5) * u*0.1; 
-      y += (rng()-0.5) * u*0.1; 
+      const [dx,dy] = sampleVectorField(field, x, y);
+      x += dx * stepSize + (rng()-0.5) * u*0.018;
+      y += dy * stepSize + (rng()-0.5) * u*0.018;
       x = Math.max(0, Math.min(w, x));
       y = Math.max(0, Math.min(h, y));
       ctx.lineTo(x,y);
@@ -522,6 +639,10 @@ function drawBauhaus(ctx,w,h,rng,mid,fg){
 
 function drawTopo(ctx,w,h,rng,mid,fg){
   const u = Math.min(w,h);
+  const safeInterpolate = (target, v1, v2) => {
+    if (Math.abs(v2 - v1) < 1e-6) return 0.5;
+    return Math.min(1, Math.max(0, (target - v1) / (v2 - v1)));
+  };
   const layers=12+state.density*2;
   for(let l=0;l<layers;l++){
     ctx.beginPath();
@@ -562,15 +683,22 @@ function renderPreview(){
   render(pctx, preview.width, preview.height);
 }
 
-function exportPNG(deviceType){
+async function exportPNG(deviceType){
   const d = DEVICES[deviceType];
-  const c = document.createElement('canvas');
-  c.width = d.w; c.height = d.h;
+  const c = createWorkCanvas(d.w, d.h);
   render(c.getContext('2d'), d.w, d.h);
   const a = document.createElement('a');
+  let objectUrl = null;
   a.download = `wllpr-${state.pattern}-${deviceType}-${state.seed}.png`;
-  a.href = c.toDataURL('image/png');
+  if(typeof c.toDataURL === 'function'){
+    a.href = c.toDataURL('image/png');
+  } else {
+    const blob = await c.convertToBlob({type:'image/png'});
+    objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
+  }
   a.click();
+  if(objectUrl) URL.revokeObjectURL(objectUrl);
   toast(`${translations[state.lang].downloadDesktop.includes('Baixar') ? 'Baixado' : 'Downloaded'}: ${d.label}`);
 }
 
@@ -599,10 +727,24 @@ function buildPalettes(){
   });
 }
 
+function buildSymmetryChips(){
+  const box=document.getElementById('symmetryChips');
+  box.innerHTML='';
+  SYMMETRY_MODES.forEach(({value,label})=>{
+    const b=document.createElement('button');
+    b.className='chip'+(value===state.symmetry?' active':'');
+    b.textContent=label;
+    b.dataset.symmetry=value;
+    b.onclick=()=>{state.symmetry=value; syncUI(); renderPreview();};
+    box.appendChild(b);
+  });
+}
+
 function syncUI(){
   document.querySelectorAll('#patternChips .chip').forEach(c => c.classList.toggle('active', c.textContent === state.pattern));
   document.querySelectorAll('#paletteRow .swatch').forEach((s,i) => s.classList.toggle('active', i === state.paletteIdx));
   document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
+  document.querySelectorAll('#symmetryChips .chip').forEach(b => b.classList.toggle('active', +b.dataset.symmetry === state.symmetry));
   document.querySelectorAll('.device-toggle button').forEach(b => b.classList.toggle('active', b.dataset.device === state.device));
   
   document.getElementById('seed').value = state.seed;
@@ -642,6 +784,7 @@ document.getElementById('randomAll').onclick = () => {
   state.pattern=PATTERNS[Math.floor(Math.random()*PATTERNS.length)];
   state.paletteIdx=Math.floor(Math.random()*PALETTES.length);
   state.seed=Math.floor(Math.random()*9999);
+  state.symmetry=SYMMETRY_MODES[Math.floor(Math.random()*SYMMETRY_MODES.length)].value;
   syncUI(); swapRender();
 };
 
@@ -677,6 +820,7 @@ document.addEventListener('keydown',e=>{
 document.getElementById('canvas-mount').appendChild(preview);
 buildPatternChips();
 buildPalettes();
+buildSymmetryChips();
 syncUI();
 applyLang('en'); // Default to English
 renderPreview();
