@@ -113,11 +113,19 @@
   .chip:hover{color:var(--txt)}
   .chip.active{background:var(--accent);color:#06121a;border-color:var(--accent);font-weight:600}
 
-  .palette-row{display:flex;gap:10px;flex-wrap:wrap}
-  .swatch{width:44px;height:44px;border-radius:12px;cursor:pointer;border:2px solid transparent;
-    transition:.2s;display:flex;overflow:hidden}
+  .palette-row{display:flex;gap:12px;flex-wrap:wrap;max-height:400px;overflow-y:auto;padding:8px}
+  .swatch{width:48px;height:48px;border-radius:12px;cursor:pointer;border:2px solid transparent;
+    transition:.2s;display:flex;overflow:hidden;position:relative;flex-shrink:0}
   .swatch.active{border-color:var(--accent);transform:scale(1.05)}
   .swatch div{flex:1}
+  .swatch:hover{transform:scale(1.08)}
+  .swatch::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(to right, var(--c1), var(--c2), var(--c3))}
+  
+  /* Custom scrollbar for palette row */
+  .palette-row::-webkit-scrollbar{width:6px}
+  .palette-row::-webkit-scrollbar-track{background:rgba(0,0,0,.2);border-radius:3px}
+  .palette-row::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:3px}
+  .palette-row::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3)}
 
   .seg{display:flex;background:rgba(0,0,0,.25);border-radius:12px;padding:5px}
   .seg button{flex:1;border:none;background:transparent;color:var(--txt-dim);padding:9px;border-radius:9px;cursor:pointer;font-size:13px;transition:.2s}
@@ -250,7 +258,21 @@ const PALETTES = [
   {name:'Candy', dark:['#1a1033','#7b2ff7','#ff5e9c'], light:['#fbe4ff','#d59bff','#7b2ff7']},
   {name:'Sand', dark:['#241c14','#a47148','#e8c39e'], light:['#fbf3e6','#d8b48a','#7a4f25']},
   {name:'Neon', dark:['#05060f','#00ffd0','#ff2e88'], light:['#e6fff9','#7af3df','#0c5f51']},
-  {name:'Berry', dark:['#1a0717','#7d2160','#ffb3d9'], light:['#fdeef6','#e08bbf','#7d2160']}
+  {name:'Berry', dark:['#1a0717','#7d2160','#ffb3d9'], light:['#fdeef6','#e08bbf','#7d2160']},
+  {name:'Midnight', dark:['#0a0e1a','#1a2a4a','#5b7c99'], light:['#e8ecf4','#b8c8d8','#2a3a5a']},
+  {name:'Aurora', dark:['#0f1c2e','#1a4a5a','#5dd9b8'], light:['#e6f7f4','#7ad9c0','#1a4a5a']},
+  {name:'Volcano', dark:['#1a0a0a','#5a1a1a','#ff6b4a'], light:['#f9ebe6','#ffb8a0','#5a1a1a']},
+  {name:'Sky', dark:['#0a1a2e','#2a4a7a','#7ab8ff'], light:['#e8f2fc','#a8d0f0','#2a4a7a']},
+  {name:'Lavender', dark:['#1a0a2e','#4a2a6a','#c9a8ff'], light:['#f4e8fc','#d4b8f0','#4a2a6a']},
+  {name:'Teal', dark:['#0a1f1a','#1a4a3a','#5ad9b8'], light:['#e6f4f0','#7ad9c0','#1a4a3a']},
+  {name:'Amber', dark:['#1a140a','#4a3a1a','#ffbf5e'], light:['#f9f4e6','#ffd9a0','#4a3a1a']},
+  {name:'Rose', dark:['#1a0a14','#4a1a2a','#ff8fab'], light:['#f9e8ec','#ffc0d0','#4a1a2a']},
+  {name:'Sage', dark:['#0a1a0f','#2a4a2a','#8fd98f'], light:['#e8f4e8','#b8d8b8','#2a4a2a']},
+  {name:'Indigo', dark:['#0a0a1a','#1a1a4a','#7b7bff'], light:['#e8e8f8','#a8a8d8','#1a1a4a']},
+  {name:'Coral', dark:['#1a0f0a','#4a2a1a','#ff8f6a'], light:['#f9eee6','#ffc8b0','#4a2a1a']},
+  {name:'Mint', dark:['#0a1a14','#1a4a3a','#5ad9aa'], light:['#e6f4f0','#7ad9c0','#1a4a3a']},
+  {name:'Peach', dark:['#1a120a','#4a3a1a','#ffb88a'], light:['#f9f2e6','#ffd4b0','#4a3a1a']},
+  {name:'Steel', dark:['#0a0f14','#2a3a4a','#7a9ab0'], light:['#e8eef4','#b8c8d8','#2a3a4a']}
 ];
 const DEVICES = {
   desktop:{w:3840,h:2160,label:'4K · 3840×2160', previewMaxW: 760},
@@ -968,6 +990,9 @@ function buildPalettes(){
     const sw=document.createElement('div');
     sw.className='swatch'+(i===state.paletteIdx?' active':'');
     pal.dark.forEach(c=>{const d=document.createElement('div');d.style.background=c;sw.appendChild(d);});
+    sw.style.setProperty('--c1', pal.dark[0]);
+    sw.style.setProperty('--c2', pal.dark[1]);
+    sw.style.setProperty('--c3', pal.dark[2]);
     sw.onclick=()=>{state.paletteIdx=i; syncUI(); renderPreview();};
     box.appendChild(sw);
   });
