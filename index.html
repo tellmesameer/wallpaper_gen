@@ -437,6 +437,22 @@ const SimplexNoise = (function() {
   };
 })();
 
+/* ============ PATTERN CONFIGURATION ============ */
+// Define which patterns support symmetry (organic patterns like Mountains don't)
+const PATTERN_CONFIG = {
+  'Arcs': { allowsSymmetry: true },
+  'Hills': { allowsSymmetry: false },      // Organic terrain
+  'Waves': { allowsSymmetry: true },
+  'Dunes': { allowsSymmetry: false },       // Organic terrain
+  'Mountains': { allowsSymmetry: false },   // Organic terrain - symmetry looks artificial
+  'Scribble': { allowsSymmetry: false },    // Organic hand-drawn style
+  'Gradient': { allowsSymmetry: true },
+  'Mesh': { allowsSymmetry: true },
+  'Concentric': { allowsSymmetry: true },
+  'Bauhaus': { allowsSymmetry: true },
+  'Topo': { allowsSymmetry: false }         // Organic topographic lines
+};
+
 /* ============ PATTERN RENDERERS (ASPECT RATIO INDEPENDENT) ============ */
 function getColors(){ return PALETTES[state.paletteIdx][state.mode]; }
 
@@ -459,6 +475,10 @@ function render(ctx,w,h){
   const [bg,mid,fg] = getColors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
 
+  // Check if current pattern supports symmetry
+  const patternAllowsSymmetry = PATTERN_CONFIG[state.pattern]?.allowsSymmetry ?? true;
+  const effectiveSymmetry = patternAllowsSymmetry ? state.symmetry : 0;
+  
   drawWithSymmetry(ctx, w, h, (targetCtx) => {
     switch(state.pattern){
       case 'Arcs': drawArcs(targetCtx,w,h,rng,mid,fg); break;
@@ -473,7 +493,7 @@ function render(ctx,w,h){
       case 'Bauhaus': drawBauhaus(targetCtx,w,h,rng,mid,fg); break;
       case 'Topo': drawTopo(targetCtx,w,h,rng,mid,fg); break;
     }
-  }, state.symmetry);
+  }, effectiveSymmetry);
 }
 
 function drawWithSymmetry(ctx, w, h, drawFn, symmetryMode){
@@ -870,39 +890,53 @@ preview.id = 'preview';
 const pctx = preview.getContext('2d');
 
 function renderPreview(){
-  const d = DEVICES[state.device];
-  const ratio = d.w / d.h;
-  
-  // Set internal canvas resolution scaled down for preview performance
-  preview.width = d.previewMaxW; 
-  preview.height = Math.round(d.previewMaxW / ratio);
-  
-  // Update CSS styling to make it look like a phone or desktop
-  preview.classList.toggle('is-phone', state.device === 'phone');
-  preview.style.width = (state.device === 'phone' ? '240px' : '100%');
-  preview.style.maxWidth = (state.device === 'phone' ? '240px' : '760px');
-  preview.style.height = 'auto';
-  
-  render(pctx, preview.width, preview.height);
+  try {
+    const d = DEVICES[state.device];
+    const ratio = d.w / d.h;
+    
+    // Set internal canvas resolution scaled down for preview performance
+    preview.width = d.previewMaxW; 
+    preview.height = Math.round(d.previewMaxW / ratio);
+    
+    // Update CSS styling to make it look like a phone or desktop
+    preview.classList.toggle('is-phone', state.device === 'phone');
+    preview.style.width = (state.device === 'phone' ? '240px' : '100%');
+    preview.style.maxWidth = (state.device === 'phone' ? '240px' : '760px');
+    preview.style.height = 'auto';
+    
+    render(pctx, preview.width, preview.height);
+  } catch (err) {
+    console.error('Render failed:', err);
+    toast(translations[state.lang].downloadDesktop.includes('Baixar') 
+      ? 'Erro ao renderizar' 
+      : 'Render failed');
+  }
 }
 
 async function exportPNG(deviceType){
-  const d = DEVICES[deviceType];
-  const c = createWorkCanvas(d.w, d.h);
-  render(c.getContext('2d'), d.w, d.h);
-  const a = document.createElement('a');
-  let objectUrl = null;
-  a.download = `wllpr-${state.pattern}-${deviceType}-${state.seed}.png`;
-  if(typeof c.toDataURL === 'function'){
-    a.href = c.toDataURL('image/png');
-  } else {
-    const blob = await c.convertToBlob({type:'image/png'});
-    objectUrl = URL.createObjectURL(blob);
-    a.href = objectUrl;
+  try {
+    const d = DEVICES[deviceType];
+    const c = createWorkCanvas(d.w, d.h);
+    render(c.getContext('2d'), d.w, d.h);
+    const a = document.createElement('a');
+    let objectUrl = null;
+    a.download = `wllpr-${state.pattern}-${deviceType}-${state.seed}.png`;
+    if(typeof c.toDataURL === 'function'){
+      a.href = c.toDataURL('image/png');
+    } else {
+      const blob = await c.convertToBlob({type:'image/png'});
+      objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
+    }
+    a.click();
+    if(objectUrl) URL.revokeObjectURL(objectUrl);
+    toast(`${translations[state.lang].downloadDesktop.includes('Baixar') ? 'Baixado' : 'Downloaded'}: ${d.label}`);
+  } catch (err) {
+    console.error('Export failed:', err);
+    toast(translations[state.lang].downloadDesktop.includes('Baixar') 
+      ? 'Erro ao baixar imagem' 
+      : 'Failed to download image');
   }
-  a.click();
-  if(objectUrl) URL.revokeObjectURL(objectUrl);
-  toast(`${translations[state.lang].downloadDesktop.includes('Baixar') ? 'Baixado' : 'Downloaded'}: ${d.label}`);
 }
 
 /* ============ UI WIRING & SYNC ============ */
@@ -913,7 +947,16 @@ function buildPatternChips(){
     const b=document.createElement('button');
     b.className='chip'+(p===state.pattern?' active':'');
     b.textContent=p; 
-    b.onclick=()=>{state.pattern=p; syncUI(); renderPreview();};
+    b.onclick=()=>{
+      state.pattern=p;
+      // Reset symmetry to None if new pattern doesn't allow it
+      const allowsSym = PATTERN_CONFIG[p]?.allowsSymmetry ?? true;
+      if (!allowsSym) {
+        state.symmetry = 0;
+      }
+      syncUI(); 
+      renderPreview();
+    };
     box.appendChild(b);
   });
 }
@@ -941,13 +984,36 @@ function buildSymmetryChips(){
     b.onclick=()=>{state.symmetry=value; syncUI(); renderPreview();};
     box.appendChild(b);
   });
+  updateSymmetryUI();
+}
+
+function updateSymmetryUI(){
+  // Disable symmetry controls for patterns that don't support it
+  const patternAllowsSymmetry = PATTERN_CONFIG[state.pattern]?.allowsSymmetry ?? true;
+  const box=document.getElementById('symmetryChips');
+  const chips = box.querySelectorAll('.chip');
+  
+  chips.forEach(b => {
+    const symValue = +b.dataset.symmetry;
+    b.disabled = !patternAllowsSymmetry && symValue !== 0;
+    b.style.opacity = (!patternAllowsSymmetry && symValue !== 0) ? '0.3' : '1';
+    b.style.cursor = (!patternAllowsSymmetry && symValue !== 0) ? 'not-allowed' : 'pointer';
+    
+    // Force "None" to be active if pattern doesn't allow symmetry
+    if (!patternAllowsSymmetry) {
+      b.classList.toggle('active', symValue === 0);
+    } else {
+      b.classList.toggle('active', symValue === state.symmetry);
+    }
+  });
 }
 
 function syncUI(){
   document.querySelectorAll('#patternChips .chip').forEach(c => c.classList.toggle('active', c.textContent === state.pattern));
   document.querySelectorAll('#paletteRow .swatch').forEach((s,i) => s.classList.toggle('active', i === state.paletteIdx));
   document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
-  document.querySelectorAll('#symmetryChips .chip').forEach(b => b.classList.toggle('active', +b.dataset.symmetry === state.symmetry));
+  // Symmetry UI is now handled by updateSymmetryUI() for pattern-aware disabling
+  updateSymmetryUI();
   document.querySelectorAll('.device-toggle button').forEach(b => b.classList.toggle('active', b.dataset.device === state.device));
   
   document.getElementById('seed').value = state.seed;
@@ -978,8 +1044,24 @@ document.getElementById('deviceToggle').addEventListener('click', e => {
   if(e.target.dataset.device){state.device=e.target.dataset.device; syncUI(); renderPreview();}
 });
 
-document.getElementById('seed').addEventListener('input', e => {state.seed=+e.target.value; syncUI(); renderPreview();});
-document.getElementById('density').addEventListener('input', e => {state.density=+e.target.value; syncUI(); renderPreview();});
+// Debounced slider inputs to avoid excessive re-renders
+let renderTimeout;
+function debounceRender(callback, delay = 50) {
+  clearTimeout(renderTimeout);
+  renderTimeout = setTimeout(callback, delay);
+}
+
+document.getElementById('seed').addEventListener('input', e => {
+  state.seed = +e.target.value;
+  syncUI();
+  debounceRender(() => renderPreview());
+});
+
+document.getElementById('density').addEventListener('input', e => {
+  state.density = +e.target.value;
+  syncUI();
+  debounceRender(() => renderPreview());
+});
 
 document.getElementById('generate').onclick = () => {state.seed=Math.floor(Math.random()*9999); syncUI(); swapRender();};
 
@@ -987,7 +1069,13 @@ document.getElementById('randomAll').onclick = () => {
   state.pattern=PATTERNS[Math.floor(Math.random()*PATTERNS.length)];
   state.paletteIdx=Math.floor(Math.random()*PALETTES.length);
   state.seed=Math.floor(Math.random()*9999);
-  state.symmetry=SYMMETRY_MODES[Math.floor(Math.random()*SYMMETRY_MODES.length)].value;
+  // Only pick symmetry modes allowed by the selected pattern
+  const allowsSym = PATTERN_CONFIG[state.pattern]?.allowsSymmetry ?? true;
+  if (allowsSym) {
+    state.symmetry=SYMMETRY_MODES[Math.floor(Math.random()*SYMMETRY_MODES.length)].value;
+  } else {
+    state.symmetry = 0;
+  }
   syncUI(); swapRender();
 };
 
