@@ -313,6 +313,7 @@ function render(ctx,w,h){
   if(!w || !h) return ctx.canvas;
 
   const rng = makeRng(state.seed*7 + state.density);
+  const grainSeed = ((state.seed ?? 1) ^ 0x9E3779B9) | 0;
   const [bg,mid,fg] = getColors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
 
