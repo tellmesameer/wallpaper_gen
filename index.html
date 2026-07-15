@@ -298,6 +298,17 @@ function makeRng(seed){
 /* ============ PATTERN RENDERERS (ASPECT RATIO INDEPENDENT) ============ */
 function getColors(){ return PALETTES[state.paletteIdx][state.mode]; }
 
+function createWorkCanvas(w,h){
+  if(typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w,h);
+  if(typeof document !== 'undefined'){
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+  }
+  throw new Error('Canvas creation is not available in this environment.');
+}
+
 function render(ctx,w,h){
   if(!w || !h) return ctx.canvas;
 
@@ -614,15 +625,22 @@ function renderPreview(){
   render(pctx, preview.width, preview.height);
 }
 
-function exportPNG(deviceType){
+async function exportPNG(deviceType){
   const d = DEVICES[deviceType];
-  const c = document.createElement('canvas');
-  c.width = d.w; c.height = d.h;
+  const c = createWorkCanvas(d.w, d.h);
   render(c.getContext('2d'), d.w, d.h);
   const a = document.createElement('a');
+  let objectUrl = null;
   a.download = `wllpr-${state.pattern}-${deviceType}-${state.seed}.png`;
-  a.href = c.toDataURL('image/png');
+  if(typeof c.toDataURL === 'function'){
+    a.href = c.toDataURL('image/png');
+  } else {
+    const blob = await c.convertToBlob({type:'image/png'});
+    objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
+  }
   a.click();
+  if(objectUrl) URL.revokeObjectURL(objectUrl);
   toast(`${translations[state.lang].downloadDesktop.includes('Baixar') ? 'Baixado' : 'Downloaded'}: ${d.label}`);
 }
 
